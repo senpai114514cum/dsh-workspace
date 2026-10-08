@@ -1,0 +1,17 @@
+﻿# 本地凭据 / 隐私
+.credentials*
+*.local
+.env
+gitee-public-key.txt
+
+# DSH 插件运行时数据
+.dshw-*.json
+whale-roles/
+whale-audio/
+whale-bubble-imgs/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
