@@ -15,3 +15,6 @@ whale-bubble-imgs/
 .idea/
 Thumbs.db
 desktop.ini
+node_modules/
+.tmp-*/
+

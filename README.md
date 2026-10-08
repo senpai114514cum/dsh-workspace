@@ -33,3 +33,7 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 - 镜像仅用于**读取公开内容**：不要经它推送，私有仓库的凭据不要经它。
 - 说明：镜像对 `codeload.github.com` 原始路径返回 403；`ghdl` 会自动把 `/zip/`、`/tar.gz/` 形式改写为 `github.com/.../archive/...`（已实测可用）。
 
+## 相关文档
+
+- [npm / pnpm 安装 GitHub 依赖](docs/github-deps.md)
+
