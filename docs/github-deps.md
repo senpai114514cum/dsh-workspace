@@ -32,3 +32,12 @@
 | `ghpkg <owner/repo> [tag或分支] [输出目录]` | 取仓库快照到 `vendor/`，打印安装命令 |
 | `gh-proxy-on` / `gh-proxy-off` | 切换本机代理（git + HTTP(S)_PROXY） |
 | `gh-mirror-on` / `gh-mirror-off` | 切换 GitHub→镜像 重写规则（无 VPN 时用） |
+
+## 代理相关（当前机制）
+
+- git 全局配了 `http.proxy` / `https.proxy` = `http://127.0.0.1:7890`，并用 `http.https://gitee.com.proxy`（空值）**豁免 gitee**（已用"坏代理"差异测试验证）。
+- 用户环境变量 `HTTP_PROXY` / `HTTPS_PROXY` 指向同一代理，`NO_PROXY` 含 `gitee.com,registry.npmmirror.com,registry.npmjs.org,localhost,127.0.0.1,::1`。
+- npm 的 proxy 已删除（它只与国内 registry 通信）。
+- 开关：`gh-proxy-on` / `gh-proxy-off`（代理）、`gh-mirror-on` / `gh-mirror-off`（无 VPN 时走镜像）。
+- 访问需要登录的 HTTPS GitHub/Gitee 仓库时，Git Credential Manager 可能弹窗；本工作流用 SSH 与令牌，点 Cancel 即可。
+

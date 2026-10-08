@@ -34,3 +34,5 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 
 - [npm / pnpm 安装 GitHub 依赖](docs/github-deps.md)
 
+> 若弹出 Git Credential Manager 窗口（只有访问**需要登录的 HTTPS 仓库**时才会弹，`.ssh` 走 SSH 不会弹），点 Cancel 即可；本仓库与 Gitee 都走 SSH，日常不会遇到。
+
