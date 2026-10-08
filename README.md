@@ -18,20 +18,13 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 - 不要把 `~/.dsh` 直接做成 git 仓库：里面有 `.credentials.yaml` 等凭据。
 - `.gitignore` 已排除运行时数据与本地凭据类文件。
 
-## GitHub 镜像用法（本机 github.com 不可直连）
+## GitHub 访问（直连优先，镜像兜底）
 
-- **git 操作**（clone / fetch）：已配 `url.insteadOf`，直接写 github.com 地址即可，自动走 `ghproxy.net` 镜像。
-- **下载 raw / release 资产**：在 URL 前加 `https://ghproxy.net/`，或直接用装好的 `ghdl` 命令：
-
-  ```powershell
-  ghdl https://raw.githubusercontent.com/user/repo/main/file.json file.json
-  ghdl https://github.com/user/repo/releases/download/v1/app.zip
-  curl.exe -L -o out.zip "https://ghproxy.net/https://codeload.github.com/user/repo/zip/refs/heads/main"
-  ```
-
-- `api.github.com` 保持直连（本机可达，未被替换）。
-- 镜像仅用于**读取公开内容**：不要经它推送，私有仓库的凭据不要经它。
-- 说明：镜像对 `codeload.github.com` 原始路径返回 403；`ghdl` 会自动把 `/zip/`、`/tar.gz/` 形式改写为 `github.com/.../archive/...`（已实测可用）。
+- **当前状态**：VPN 已开启，github.com **直连可用**（已实测 clone / ls-remote / 下载），全局 git 重写规则已撤下——请求走真站，推送与凭据都正常。
+- **VPN 关闭时**：运行 `gh-mirror-on` 把 5 条重写规则加回来（github.com → ghproxy.net）；恢复 VPN 后运行 `gh-mirror-off` 撤下。
+- **下载命令**：`ghdl` 默认直连，失败会自动回退镜像；`ghdl -m <url>` 强制走镜像。`ghpkg` 同理（取仓库快照到 `vendor/`）。
+- 镜像只用于**读取公开内容**：不要经它推送，私有仓库的凭据不要经它。
+- `api.github.com` 始终直连。
 
 ## 相关文档
 
