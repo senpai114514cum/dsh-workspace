@@ -10,7 +10,7 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 | Node.js | `D:\Node`，v26.11.1（npm 11.20.0） |
 | npm 源 | `https://registry.npmmirror.com/`（`~/.npmrc`） |
 | GitHub 读取 | 经 `ghproxy.net` 镜像（`~/.gitconfig` 的 `url.insteadOf`） |
-| Gitee | SSH 密钥 `~/.ssh/id_ed25519`（无口令） |
+| SSH 密钥 | Gitee：`~/.ssh/id_ed25519`；GitHub：`~/.ssh/id_ed25519_github`（均无口令） |
 | DSH 插件 | `dsh-whale-widget` 0.3.18（desktop profile） |
 
 ## 注意

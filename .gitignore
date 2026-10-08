@@ -2,7 +2,7 @@
 .credentials*
 *.local
 .env
-gitee-public-key.txt
+*-public-key.txt
 
 # DSH 插件运行时数据
 .dshw-*.json
@@ -17,4 +17,5 @@ Thumbs.db
 desktop.ini
 node_modules/
 .tmp-*/
+
 
