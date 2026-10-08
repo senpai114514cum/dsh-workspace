@@ -36,3 +36,19 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 
 > 若弹出 Git Credential Manager 窗口（只有访问**需要登录的 HTTPS 仓库**时才会弹，`.ssh` 走 SSH 不会弹），点 Cancel 即可；本仓库与 Gitee 都走 SSH，日常不会遇到。
 
+## 远端与推送
+
+| 远端 | 地址 | 说明 |
+|---|---|---|
+| `origin` | `git@gitee.com:ninjia400/dsh-workspace.git` | Gitee，**主远端**（国内直连，不需要 VPN） |
+| `github` | `git@github.com:senpai114514cum/dsh-workspace.git` | GitHub，备用/分享（SSH 走 443 通道，需要 VPN） |
+
+```powershell
+git push                 # 推 Gitee（当前分支跟踪 origin/main）
+git push github main     # 推 GitHub
+git pull                 # 从 Gitee 拉
+```
+
+- 两个平台各有独立 SSH 密钥：Gitee 用 `~/.ssh/id_ed25519`，GitHub 用 `~/.ssh/id_ed25519_github`。
+- 配置见 `~/.ssh/config`：GitHub 默认走 `ssh.github.com:443`，需要时可用 `github-22` 走 22 端口。
+
