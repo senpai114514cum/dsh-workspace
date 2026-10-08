@@ -5,9 +5,12 @@
 
 ## 各形态实测结果
 
+> ⚠️ 前提：`git` 必须在 PATH 上。本机 `D:\Git\cmd` 已配好，**新开终端**即可；
+> DSH 客户端自身要**重启一次**才会继承新 PATH —— 否则它调用的 pnpm 会报找不到 git。
+
 | 依赖形态 | 示例 | 本机可用性 |
 |---|---|---|
-| `github:` / `owner/repo#ref` / `git+https://github.com/...` | `npm i github:user/repo#v1.2.3` | ✅ 走 git，镜像重写自动生效（已实测 npm 与 pnpm 均成功） |
+| `github:` / `owner/repo#ref` / `git+https://github.com/...` | `npm i github:user/repo#v1.2.3` | ✅ 走 git，镜像重写自动生效（**npm 11.20 与 pnpm 11.7 均已实测装成功**） |
 | `https://codeload.github.com/...tar.gz` | `"dep": "https://codeload.github.com/user/repo/tar.gz/v1.2.3"` | ❌ 直连不通，镜像对该路径返回 403 |
 | `https://github.com/.../archive/...tar.gz` | | ⚠️ 直连不通，需加镜像前缀或先下载成本地文件 |
 | `git+ssh://git@github.com/...` | | ❌ SSH 到 github.com 不通；私有仓库需真正的代理/VPN |
@@ -32,3 +35,4 @@
 |---|---|
 | `ghdl <github-url> [输出文件]` | 经镜像下载任意 GitHub 地址；codeload 的 zip/tar.gz 自动改写成 archive 形式 |
 | `ghpkg <owner/repo> [tag或分支] [输出目录]` | 经镜像取仓库快照到 `vendor/`（先试 tag，再试分支），并打印可直接执行的安装命令 |
+
