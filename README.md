@@ -21,7 +21,7 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 ## GitHub 镜像用法（本机 github.com 不可直连）
 
 - **git 操作**（clone / fetch）：已配 `url.insteadOf`，直接写 github.com 地址即可，自动走 `ghproxy.net` 镜像。
-- **下载 raw / codeload / release 资产**：在 URL 前加 `https://ghproxy.net/`，或直接用装好的 `ghdl` 命令：
+- **下载 raw / release 资产**：在 URL 前加 `https://ghproxy.net/`，或直接用装好的 `ghdl` 命令：
 
   ```powershell
   ghdl https://raw.githubusercontent.com/user/repo/main/file.json file.json
@@ -31,3 +31,5 @@ DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产�
 
 - `api.github.com` 保持直连（本机可达，未被替换）。
 - 镜像仅用于**读取公开内容**：不要经它推送，私有仓库的凭据不要经它。
+- 说明：镜像对 `codeload.github.com` 原始路径返回 403；`ghdl` 会自动把 `/zip/`、`/tar.gz/` 形式改写为 `github.com/.../archive/...`（已实测可用）。
+
