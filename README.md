@@ -52,3 +52,17 @@ git pull                 # 从 Gitee 拉
 - 两个平台各有独立 SSH 密钥：Gitee 用 `~/.ssh/id_ed25519`，GitHub 用 `~/.ssh/id_ed25519_github`。
 - 配置见 `~/.ssh/config`：GitHub 默认走 `ssh.github.com:443`，需要时可用 `github-22` 走 22 端口。
 
+## DSH 全局约定与技能（跨会话生效）
+
+本机有两处"所有会话都生效"的配置，源文件也版本化在本仓库 `dsh-config/` 下：
+
+| 位置 | 作用 |
+|---|---|
+| `~/.dsh/AGENTS.md` | **用户级全局指令**，DSH 会把它注入每个会话的上下文 |
+| `~/.dsh/skills/link-github-repo/SKILL.md` | 技能目录（DSH 监听该目录，新增技能无需重启即进入所有会话的技能目录） |
+
+策略：**挂 VPN 时直连 GitHub；未挂 VPN 时自动回退 ghproxy.net 镜像或 Gitee 镜像**；镜像仅用于读取公开内容。
+一条命令即可完成判定与回退：`ghclone <owner/repo> [目录]`。
+
+在另一台机器上重建这套配置：`pwsh -File .\dsh-config\install.ps1`
+
