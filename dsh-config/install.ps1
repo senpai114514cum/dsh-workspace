@@ -1,4 +1,4 @@
-# 把本目录的全局指令 / 技能 / 自建命令安装到本机（新机器重建用）
+﻿# 把本目录的全局指令 / 技能 / 自建命令安装到本机（新机器重建用）
 param(
   [string]$DshHome = "$env:USERPROFILE\.dsh",
   [string]$ToolsDir = "D:\Tools\bin"

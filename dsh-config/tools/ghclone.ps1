@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   GitHub 仓库获取：直连优先，失败自动回退 ghproxy.net 镜像或 Gitee 镜像。
 .EXAMPLE
