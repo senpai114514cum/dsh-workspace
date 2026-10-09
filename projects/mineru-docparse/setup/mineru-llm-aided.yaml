@@ -1,0 +1,38 @@
+# ============================================================
+# MinerU「最高质量 Markdown」后处理配置片段
+#
+# 放置位置： %MINERU_ROOT%\home\config.yaml
+#            即 $MINERU_HOME\config.yaml（MINERU_HOME 就是部署脚本里设的那个）
+#
+# ！！这是「片段」，不是完整配置 ！！
+# MinerU 首次运行会自动生成 config.yaml。如果该文件已存在，请把下面
+# llm_aided: 这一段「合并」进去，不要整个覆盖，否则会丢掉 model: 等已有设置。
+#
+# 这两个开关默认都是 false。打开后 Markdown 的标题层级、跨页表格会更接近原文，
+# 是本地方案里最后一段可捡的质量提升。代价：需要调用一个「OpenAI 兼容」的
+# 大模型服务（云端或本地都行，见文末）。
+# ============================================================
+
+llm_aided:
+  api_key: ${MINERU_LLM_API_KEY:-}          # 建议走环境变量，别把 key 明文写进文件
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  model: qwen3.5-plus
+  enable_thinking: false
+  max_concurrency: 16
+  features:
+    title_leveling: true                    # 标题分级：把段落标题归入 H2~H6
+    cross_page_table_cell_merge: true       # 跨页表格：让 LLM 判断边界行是否连续
+
+# ------------------------------------------------------------
+# 用本地大模型代替云端（完全离线）：
+# 比如 Ollama 起一个 OpenAI 兼容端点，然后把上面改成
+#
+#   llm_aided:
+#     api_key: ollama                        # 随便填个非空值
+#     base_url: http://127.0.0.1:11434/v1
+#     model: qwen3:14b                       # 换成你本地拉的模型名
+#
+# 注意：两个 feature 要求 api_key / base_url / model 三者都非空才会生效。
+#
+# 改完配置记得重启服务（mineru server stop / start，或重启 api-server）。
+# ------------------------------------------------------------

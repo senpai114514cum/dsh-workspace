@@ -1,0 +1,11 @@
+# 本地状态与缓存，不入库
+settings.json
+logs/
+__pycache__/
+*.pyc
+_imgtest/
+_运行日志_*.txt
+
+# 测试语料与产物体积很大（数百 MB），不入库
+_corpus/
+*.assets/

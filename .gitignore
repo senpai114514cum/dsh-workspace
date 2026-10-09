@@ -19,3 +19,9 @@ node_modules/
 .tmp-*/
 .probe-*
 
+# MinerU 项目的测试语料与产物（数百 MB）
+projects/mineru-docparse/**/_corpus/
+projects/mineru-docparse/**/*.assets/
+projects/mineru-docparse/**/settings.json
+projects/mineru-docparse/**/_运行日志_*.txt
+projects/mineru-docparse/**/__pycache__/

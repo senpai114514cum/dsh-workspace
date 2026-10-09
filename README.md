@@ -2,6 +2,12 @@
 
 DeepSeek Harness（桌面端）的默认工作区，用于放置日常任务产生的文件与项目。
 
+## 项目
+
+| 目录 | 说明 |
+|---|---|
+| [`projects/mineru-docparse`](projects/mineru-docparse) | MinerU 文档解析流水线：批量 PDF→Markdown 的图形界面工具 + 幻觉检测/自动清理 + 5 份实测报告 |
+
 ## 本机环境备忘
 
 | 组件 | 位置 / 版本 |
