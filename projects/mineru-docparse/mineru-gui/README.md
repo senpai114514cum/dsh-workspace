@@ -39,6 +39,19 @@
 > `SetWindowLongPtr` 子类化窗口过程，和 Tk 的交互只有"给窗口挂一个回调"这一处，
 > 失败时能整体降级成"拖放不可用"，不影响任何其它功能。
 >
+> ⚠️ **窗口过程里绝对不能碰 Tk。** Tcl 派发 Windows 消息时已释放 GIL，此时从窗口
+> 过程回调进 Tcl（哪怕只是 `after_idle`）会直接 fatal crash：
+>
+> ```
+> Fatal Python error: PyEval_RestoreThread: the function must be called
+> with the GIL held ... but the GIL is released
+> ```
+>
+> 这个崩溃**只在真实 `mainloop` 下出现**——用 `update()` 泵事件的测试测不出来
+> （`update()` 在 Python 调用栈内同步派发，GIL 一直在手上）。所以窗口过程只往
+> 普通 Python 列表里塞路径，由 Tk 侧定时器（120ms）取走再回调。
+> `selftest_dnd.py` 里有一项专门在**子进程 + 真 mainloop** 下验证这一点。
+>
 > 仅 Windows 可用；其它平台提示条会显示"本平台不支持拖放"，按钮照常工作。
 
 ## 安全约定

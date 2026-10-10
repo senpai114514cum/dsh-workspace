@@ -41,6 +41,71 @@ def expect(cond, label):
         fails.append(label)
 
 
+def _mainloop_probe() -> int:
+    """在**真实 mainloop** 下投递一次拖放。
+
+    这一项必须单独跑，而且必须走 mainloop 而不是 update()：
+    窗口过程里若调用任何 Tk 函数，Tcl 派发消息时 GIL 已释放，会直接
+    Fatal Python error（实测踩过）。而 update() 是在 Python 调用栈内
+    同步派发、GIL 一直在手上，**测不出这个崩溃**。所以这里单独进程 + mainloop。
+    """
+    import ctypes
+    import struct
+    import time
+    from ctypes import wintypes
+
+    import tkinter as tk
+
+    from mineru_gui import dnd
+
+    _k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    _u32 = ctypes.WinDLL('user32', use_last_error=True)
+    _k32.GlobalAlloc.restype = wintypes.HGLOBAL
+    _k32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    _k32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    _k32.GlobalLock.restype = ctypes.c_void_p
+    _k32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+
+    root = tk.Tk()
+    root.geometry('240x120')
+    got: list[list[str]] = []
+    target = dnd.DropTarget(root, lambda p: got.append(list(p)))
+    if not target.ok:
+        print('安装失败: %s' % target.reason)
+        root.destroy()
+        return 1
+
+    def drop():
+        png = APP_DIR / 'assets' / 'icon.png'
+        payload = ('\0'.join([str(png)]) + '\0\0').encode('utf-16-le')
+        blob = struct.pack('<IiiII', 20, 0, 0, 0, 1) + payload
+        h = _k32.GlobalAlloc(0x0002 | 0x0040, len(blob))
+        ptr = _k32.GlobalLock(h)
+        ctypes.memmove(ptr, blob, len(blob))
+        _k32.GlobalUnlock(h)
+        _u32.PostMessageW(wintypes.HWND(target.hwnds[0]), dnd.WM_DROPFILES,
+                          wintypes.WPARAM(h), 0)
+
+    root.after(250, drop)
+    root.after(2200, root.quit)
+    t0 = time.time()
+    root.mainloop()                     # ← 关键：真 mainloop，不是 update()
+    elapsed = time.time() - t0
+    print('mainloop 正常退出，用时 %.1f 秒，收到 %d 次' % (elapsed, len(got)))
+    target.close()
+    root.destroy()
+    if not got:
+        print('未收到拖放')
+        return 1
+    print('OK %s' % Path(got[0][0]).name)
+    return 0
+
+
+# 子进程模式：只跑 mainloop 探测，绝不执行下面的父测试
+if '--mainloop' in sys.argv:
+    sys.exit(_mainloop_probe())
+
+
 # ============================================================ 1. 纯逻辑
 print('=== expand_paths：文件夹递归展开与格式过滤 ===')
 TMP = SCRATCH / 'tree'
@@ -178,6 +243,29 @@ else:
         expect(False, '真实消息测试抛异常：%s: %s' % (type(exc).__name__, exc))
     finally:
         shutil.rmtree(tmp2, ignore_errors=True)
+
+# ============================================================ 3. 真实 mainloop
+print()
+print('=== 真实 mainloop（单独子进程，崩溃不会带走整个自检）===')
+if not dnd.available():
+    print('  （跳过：非 Windows）')
+else:
+    import subprocess
+
+    log = SCRATCH / '_mainloop.txt'
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    with open(log, 'w', encoding='utf-8') as fh:
+        # 不用管道（沙箱下会失败），输出重定向到文件
+        proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--mainloop'],
+                              stdout=fh, stderr=subprocess.STDOUT, timeout=60)
+    text = log.read_text(encoding='utf-8', errors='replace')
+    for line in text.strip().splitlines():
+        print('    %s' % line)
+    expect(proc.returncode == 0,
+           'mainloop 下未崩溃（退出码 %d）%s'
+           % (proc.returncode,
+              '—— 窗口过程里是不是碰了 Tk？' if proc.returncode != 0 else ''))
+    expect('OK icon.png' in text, 'mainloop 下拖放确实进入了回调')
 
 print()
 print('=' * 52)

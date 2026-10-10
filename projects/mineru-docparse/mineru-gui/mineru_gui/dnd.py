@@ -91,9 +91,22 @@ class DropTarget:
 
         self._drop = DropTarget(self.root, self._on_drop)
 
-    `on_drop(paths)` 会在**空闲时**被调用（不是直接在窗口过程里），
-    避免在窗口过程内部重入 Tk 造成状态错乱。
+    ⚠️ 关键约束：**窗口过程里绝对不能碰 Tk**。
+
+    Tcl 在派发 Windows 消息时是释放了 GIL 的，此时从窗口过程回调进 Tcl
+    （哪怕只是 after_idle）会把 Python 的线程状态搞坏，直接 fatal crash：
+
+        Fatal Python error: PyEval_RestoreThread: the function must be called
+        with the GIL held ... but the GIL is released
+
+    这个崩溃只在**真实 mainloop** 下出现；用 update() 泵事件的测试测不出来
+    （update() 是在 Python 调用栈内同步派发，GIL 一直在手上）。
+
+    所以窗口过程只做一件事：把路径塞进普通 Python 列表 `_pending`。
+    再由 Tk 侧的定时器 `_poll` 取走并回调 `on_drop`。两边彻底解耦。
     """
+
+    POLL_MS = 120
 
     def __init__(self, widget, on_drop):
         self.widget = widget
@@ -101,6 +114,8 @@ class DropTarget:
         self.hwnds: list[int] = []
         self.ok = False
         self.reason = ''
+        self._pending: list[list[str]] = []          # 只被窗口过程 append
+        self._poll_id = None
         self._hooks: list[tuple[int, int, WNDPROC]] = []      # (hwnd, oldproc, newproc)
         if not _IS_WINDOWS:
             self.reason = '仅 Windows 支持原生拖放'
@@ -108,6 +123,7 @@ class DropTarget:
         try:
             self._install()
             self.ok = True
+            self._schedule_poll()
         except Exception as exc:                              # 拖放失败不能拖垮界面
             self.reason = '%s: %s' % (type(exc).__name__, exc)
 
@@ -132,6 +148,7 @@ class DropTarget:
             self.hwnds.append(hwnd)
 
     def _wndproc(self, hwnd, msg, wparam, lparam):
+        """窗口过程。只碰 Win32 和普通 Python 容器，**不碰 Tk**。"""
         if msg == WM_DROPFILES:
             try:
                 paths = _query_paths(wparam)
@@ -143,25 +160,37 @@ class DropTarget:
                 except Exception:
                     pass
             if paths:
-                # 不在窗口过程里直接碰 Tk，排到空闲时执行
-                try:
-                    self.widget.after_idle(lambda: self._deliver(paths))
-                except Exception:
-                    pass
+                self._pending.append(paths)       # 列表 append，GIL 由 ctypes 保证
             return 0
         old = next((o for h, o, _ in self._hooks if h == hwnd), None)
         if old:
             return _user32.CallWindowProcW(old, hwnd, msg, wparam, lparam)
         return _user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
-    def _deliver(self, paths: list[str]) -> None:
+    # ---------------------------------------------------------------- Tk 侧
+    def _schedule_poll(self) -> None:
         try:
-            self.on_drop(paths)
+            self._poll_id = self.widget.after(self.POLL_MS, self._poll)
         except Exception:
-            pass
+            self._poll_id = None
+
+    def _poll(self) -> None:
+        while self._pending:
+            paths = self._pending.pop(0)
+            try:
+                self.on_drop(paths)
+            except Exception:
+                pass
+        self._schedule_poll()
 
     def close(self) -> None:
-        """把窗口过程还原回去（关闭窗口前调用）。"""
+        """还原窗口过程并停掉轮询（关闭窗口前调用）。"""
+        if self._poll_id is not None:
+            try:
+                self.widget.after_cancel(self._poll_id)
+            except Exception:
+                pass
+            self._poll_id = None
         for hwnd, old, _ in self._hooks:
             try:
                 _set_wndproc(hwnd, GWLP_WNDPROC, old)
