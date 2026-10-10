@@ -269,9 +269,89 @@ def _uicheck() -> int:
     for i in rows:
         print('   行%s = %s' % (i, app.tree.item(i, 'values')))
 
+    # ---- 拖放：投递一条真实的 WM_DROPFILES，验证从窗口过程一路进到队列 ----
+    if not _dropcheck(app):
+        app.destroy()
+        return 1
+
     app.destroy()
     print('交互自检通过')
     return 0
+
+
+def _dropcheck(app) -> bool:
+    """在真实 App 上模拟一次文件拖放（走 win32 消息，不是直接调回调）。"""
+    import ctypes
+    import struct
+    import time
+    from ctypes import wintypes
+    from pathlib import Path as _P
+
+    from mineru_gui import dnd
+
+    if not dnd.available():
+        print('拖放：非 Windows，跳过')
+        return True
+    if not getattr(app, '_drop', None) or not app._drop.ok:
+        print('拖放：安装失败（%s）' % getattr(app._drop, 'reason', '?'))
+        return False
+    print('拖放：已安装，登记 %d 个窗口句柄' % len(app._drop.hwnds))
+
+    k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    u32 = ctypes.WinDLL('user32', use_last_error=True)
+    k32.GlobalAlloc.restype = wintypes.HGLOBAL
+    k32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    k32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    k32.GlobalLock.restype = ctypes.c_void_p
+    k32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+
+    def make_hdrop(paths):
+        payload = ('\0'.join(str(p) for p in paths) + '\0\0').encode('utf-16-le')
+        blob = struct.pack('<IiiII', 20, 0, 0, 0, 1) + payload
+        h = k32.GlobalAlloc(0x0002 | 0x0040, len(blob))
+        ptr = k32.GlobalLock(h)
+        ctypes.memmove(ptr, blob, len(blob))
+        k32.GlobalUnlock(h)
+        return h
+
+    def post(paths):
+        before = len(app.jobs)
+        hdrop = make_hdrop(paths)
+        u32.SendMessageW(wintypes.HWND(app._drop.hwnds[0]), dnd.WM_DROPFILES,
+                         wintypes.WPARAM(hdrop), 0)
+        deadline = time.time() + 5
+        while time.time() < deadline and len(app.jobs) == before:
+            app.update()
+            time.sleep(0.02)
+        return len(app.jobs) - before
+
+    # 1) 格式不支持的文件：应当被挡在门外，队列不变
+    n = post([_P(__file__)])                      # run.py 不是可解析格式
+    if n != 0:
+        print('拖放：不支持格式本应被拒，队列却 +%d' % n)
+        return False
+    print('拖放：不支持格式已正确拒绝（run.py 不在可解析集合里）')
+
+    # 2) 拖一个文件夹：应递归展开出里面的 icon.png
+    assets = _P(__file__).with_name('assets')
+    if not assets.is_dir():
+        print('拖放：缺少测试目录 %s' % assets)
+        return False
+    n = post([assets])
+    if n != 1:
+        print('拖放：拖入文件夹后队列应 +1（assets 里的 icon.png），实际 +%d' % n)
+        return False
+    print('拖放：拖入文件夹后递归展开 +1，末项 = %s' % app.jobs[-1].name)
+
+    # 3) 再拖同一个文件：应被去重，队列不变
+    n = post([assets / 'icon.png'])
+    if n != 0:
+        print('拖放：重复文件本应去重，队列却 +%d' % n)
+        return False
+    print('拖放：重复文件已去重')
+
+    print('拖放提示条 = %s' % app.lbl_drop.cget('text').splitlines()[0])
+    return True
 
 
 if __name__ == '__main__':

@@ -21,6 +21,26 @@
 
 **队列顺序就是处理顺序**，上移/下移可以调整。
 
+## 拖放添加文件 / 文件夹
+
+**把文件或文件夹直接从资源管理器拖进窗口就能添加**，可以一次拖多个、文件和文件夹混着拖。
+
+* 文件夹会**递归**扫描，只收支持的格式（大小写不敏感，`.PNG` 也认）
+* 同一个文件重复拖入会自动去重
+* 格式不支持的项目会在日志里逐个说明，不会静默吞掉
+* 队列顶部那条提示会回显结果（`✓ 已从拖放添加 N 个文件`），5 秒后恢复成常驻说明
+* 转换进行中拖入会被忽略，并在日志里提示
+
+实现见 `mineru_gui/dnd.py`：**用的是 Win32 原生 `WM_DROPFILES`，零依赖**。
+
+> 为什么不用 `tkinterdnd2`：它要加载 tkdnd 这个 Tcl 扩展包，而本机 Python 3.13 的
+> Tcl 运行库路径本来就没被正确编入（`run.py` 的 `fix_tcl()` 得手工补 `TCL_LIBRARY`
+> 才能建窗口），再叠一层 Tcl 包加载容易出问题。直接用 `DragAcceptFiles` +
+> `SetWindowLongPtr` 子类化窗口过程，和 Tk 的交互只有"给窗口挂一个回调"这一处，
+> 失败时能整体降级成"拖放不可用"，不影响任何其它功能。
+>
+> 仅 Windows 可用；其它平台提示条会显示"本平台不支持拖放"，按钮照常工作。
+
 ## 安全约定
 
 **绝不覆盖已有文件。** 输出重名时：
@@ -177,7 +197,11 @@ $py = '%MINERU_ROOT%\.venv\Scripts\python.exe'
 mineru-gui/
 ├─ 启动.bat / 调试启动.bat     启动器（纯 ASCII，避免代码页问题）
 ├─ run.py                      入口：TCL 修复 + venv 包挂载 + 分流到 GUI / 命令行
-├─ selftest_logic.py           逻辑自检（17 项）
+├─ selftest_logic.py           逻辑自检（约 50 项）
+├─ selftest_images.py          图片抽取 + 乱码检测自检
+├─ selftest_tables.py          表格计数自检（含误报回归用例）
+├─ selftest_dnd.py             拖放自检（含真实 WM_DROPFILES 消息投递）
+├─ selftest_flow.py            端到端：驱动真实 App 跑完整流程
 ├─ settings.json               设置持久化（自动生成）
 ├─ logs/                       每个文件的完整 MinerU 日志（自动生成）
 ├─ assets/
@@ -188,6 +212,9 @@ mineru-gui/
 └─ mineru_gui/
    ├─ config.py    设置项、路径自动探测、环境变量注入
    ├─ checker.py   体检规则 + 清理（消幻觉）
+   ├─ images.py    把内联 base64 图片抽成独立文件
+   ├─ dnd.py       Windows 原生拖放（ctypes，零依赖）
+   ├─ probe.py     页数与 auto OCR 判定探测
    ├─ runner.py    队列、流水线 Stage、子进程执行、进度解析
    └─ ui.py        tkinter 界面
 ```

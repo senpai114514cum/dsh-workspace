@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import APP_NAME, __version__
-from . import checker, probe
+from . import checker, dnd, probe
 from .config import (OCR_LABEL, OCR_MODES, SUPPORTED_EXT, TIER_LABEL, TIERS,
                      Settings, reject_reason)
 from .runner import Job, Runner
@@ -55,6 +55,7 @@ class App(tk.Tk):
 
         self._build_ui()
         self._load_settings_into_ui()
+        self._install_dnd()
         self.after(100, self._pump)
         self._log('就绪。先添加文件 → 选输出文件夹 → 开始转换。')
         warn = self.settings.validate()
@@ -133,8 +134,17 @@ class App(tk.Tk):
         # 队列
         f_q = ttk.LabelFrame(mid, text='转换队列（按此顺序逐个处理）')
         f_q.grid(row=0, column=0, sticky='nsew', padx=(0, 8))
-        f_q.rowconfigure(0, weight=1)
+        f_q.rowconfigure(1, weight=1)
         f_q.columnconfigure(0, weight=1)
+
+        # 拖放提示条：整个窗口都是放置目标，这里只是让功能可见、并回显结果
+        self.lbl_drop = tk.Label(
+            f_q, anchor='center', justify='center', padx=8, pady=7,
+            bg='#eef4fb', fg='#2c5d8f', relief='groove', bd=1,
+            font=('Microsoft YaHei UI', 9),
+            text='⇩  把文件或文件夹直接拖进本窗口即可添加\n'
+                 '（可一次拖多个；文件夹会递归扫描支持的格式）')
+        self.lbl_drop.grid(row=0, column=0, columnspan=2, sticky='ew', padx=6, pady=(6, 0))
 
         cols = ('idx', 'name', 'pages', 'automode', 'status', 'time', 'note')
         tv = ttk.Treeview(f_q, columns=cols, show='headings', selectmode='extended')
@@ -146,9 +156,9 @@ class App(tk.Tk):
         ]:
             tv.heading(c, text=t)
             tv.column(c, width=w, anchor=anchor, stretch=(c in ('name', 'note')))
-        tv.grid(row=0, column=0, sticky='nsew', padx=6, pady=6)
+        tv.grid(row=1, column=0, sticky='nsew', padx=6, pady=6)
         sb = ttk.Scrollbar(f_q, orient='vertical', command=tv.yview)
-        sb.grid(row=0, column=1, sticky='ns', pady=6)
+        sb.grid(row=1, column=1, sticky='ns', pady=6)
         tv.configure(yscrollcommand=sb.set)
         tv.tag_configure('done', foreground='#0a7d28')
         tv.tag_configure('failed', foreground='#c0392b')
@@ -158,7 +168,7 @@ class App(tk.Tk):
         tv.bind('<Double-1>', lambda e: self._open_selected_output())
 
         bar = ttk.Frame(f_q)
-        bar.grid(row=1, column=0, columnspan=2, sticky='ew', padx=6, pady=(0, 6))
+        bar.grid(row=2, column=0, columnspan=2, sticky='ew', padx=6, pady=(0, 6))
         for text, cmd in [('添加文件…', self._add_files), ('添加文件夹…', self._add_folder),
                           ('移除选中', self._remove_selected), ('上移', lambda: self._move(-1)),
                           ('下移', lambda: self._move(1)), ('清空', self._clear)]:
@@ -232,6 +242,64 @@ class App(tk.Tk):
         self.settings.save()
         self._log('设置已保存到 settings.json')
 
+    # ================================================== 拖放
+
+    def _install_dnd(self) -> None:
+        """把整个窗口登记成文件放置目标。
+
+        失败不影响任何其它功能 —— 拖放只是多一条添加入口，
+        实在不行还有「添加文件…／添加文件夹…」两个按钮。
+        """
+        self._drop = None
+        if not dnd.available():
+            self.lbl_drop.config(text='（本平台不支持拖放，请用下方按钮添加）')
+            return
+        self._drop = dnd.DropTarget(self, self._on_drop)
+        if not self._drop.ok:
+            self.lbl_drop.config(
+                text='拖放不可用（%s）\n请用下方按钮添加' % self._drop.reason,
+                bg='#fdf0e6', fg='#9c5a1e')
+            self._log('提示：拖放功能未能启用 —— %s' % self._drop.reason)
+
+    def _on_drop(self, paths: list[str]) -> None:
+        """处理一次拖放。文件夹递归展开，格式不支持的直接说清楚。"""
+        if self.runner.running:
+            self._log('拖入 %d 项，但正在转换中，已忽略。' % len(paths))
+            return
+
+        files, unsupported, n_dirs = dnd.expand_paths(paths, SUPPORTED_EXT)
+        self._log(dnd.describe_drop(paths, SUPPORTED_EXT))
+        for p in unsupported:
+            self._log('  跳过 %s（格式不支持）' % p.name)
+
+        if not files:
+            self.lbl_drop.config(
+                text='拖入的 %d 项里没有支持的文档格式\n'
+                     '（支持 %s）' % (len(paths), ' '.join(sorted(SUPPORTED_EXT))),
+                bg='#fdf0e6', fg='#9c5a1e')
+            return
+
+        before = len(self.jobs)
+        self._append(files)
+        added = len(self.jobs) - before
+        extra = ''
+        if unsupported:
+            extra += '，%d 项格式不支持' % len(unsupported)
+        if added < len(files):
+            extra += '，%d 个已在队列中' % (len(files) - added)
+        self.lbl_drop.config(
+            text='✓ 已从拖放添加 %d 个文件（队列共 %d 个）%s' % (added, len(self.jobs), extra),
+            bg='#eaf6ec', fg='#1f7a33')
+        # 提示 5 秒后回到常驻说明，避免状态一直被上一次结果占着
+        self.after(5000, self._reset_drop_hint)
+
+    def _reset_drop_hint(self) -> None:
+        if self._drop and self._drop.ok:
+            self.lbl_drop.config(
+                text='⇩  把文件或文件夹直接拖进本窗口即可添加\n'
+                     '（可一次拖多个；文件夹会递归扫描支持的格式）',
+                bg='#eef4fb', fg='#2c5d8f')
+
     # ================================================== 队列操作
 
     def _add_files(self) -> None:
@@ -243,8 +311,8 @@ class App(tk.Tk):
         d = filedialog.askdirectory(title='选择文件夹（会递归扫描支持的格式）')
         if not d:
             return
-        found = sorted(p for p in Path(d).rglob('*')
-                       if p.is_file() and p.suffix.lower() in SUPPORTED_EXT)
+        # 与拖放共用同一套展开逻辑，避免两边过滤规则不一致
+        found, _, _ = dnd.expand_paths([d], SUPPORTED_EXT)
         if not found:
             messagebox.showinfo('提示', '该文件夹里没有找到支持的文档格式。')
             return
@@ -534,6 +602,8 @@ class App(tk.Tk):
             if not messagebox.askyesno('确认', '正在转换中，确定要退出吗？'):
                 return
             self.runner.stop()
+        if getattr(self, '_drop', None):
+            self._drop.close()          # 还原窗口过程，否则会留下悬空的钩子
         self._collect_settings()
         self.settings.save()
         self.destroy()
