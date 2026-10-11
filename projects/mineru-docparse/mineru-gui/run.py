@@ -79,6 +79,8 @@ def main() -> int:
         return _check(args[1:])
     if args and args[0] == '--probe':
         return _probe(args[1:])
+    if args and args[0] == '--inline':
+        return _inline(args[1:])
 
     try:
         from mineru_gui.ui import main as ui_main
@@ -230,6 +232,73 @@ def _probe(args: list[str]) -> int:
             p.name[:44], pages if pages else '-',
             mode if mode else '-', probe.describe(p)))
     return rc
+
+
+def _inline(argv: list[str]) -> int:
+    """把 md 里引用的本地图片重新内联成 base64，让产物变成自包含单文件。
+
+    这是「图片抽成独立文件」的反向操作。可以给单个 md，也可以给目录
+    （会处理目录下所有 md）。
+    """
+    from pathlib import Path as _P
+    from mineru_gui import images
+
+    args = [a for a in argv if not a.startswith('-')]
+    keep_assets = '--keep-assets' in argv
+    if not args:
+        print('用法：run.py --inline 文件.md [更多.md ... | 目录]\n'
+              '      --keep-assets  不删除已不再需要的 .assets 目录')
+        return 2
+
+    targets: list[_P] = []
+    for a in args:
+        p = _P(a)
+        if p.is_dir():
+            targets.extend(sorted(p.rglob('*.md')))
+        elif p.exists():
+            targets.append(p)
+        else:
+            print('  跳过（不存在）：%s' % a)
+    if not targets:
+        print('没有找到要处理的 md')
+        return 2
+
+    n_done = n_skip = 0
+    total_before = total_after = 0
+    folders: set[_P] = set()
+    for md in targets:
+        r = images.inline_images(md)
+        print('  %-44s %s' % (md.name[:44], images.describe_inline(r)))
+        if r['count']:
+            n_done += 1
+            total_before += r['before']
+            total_after += r['after']
+            d = md.parent / (md.stem + '.assets')
+            if d.is_dir():
+                folders.add(d)
+        else:
+            n_skip += 1
+
+    print()
+    print('内联 %d 个，跳过 %d 个' % (n_done, n_skip))
+    if n_done:
+        print('体积 %.0f KB → %.1f MB' % (total_before / 1024, total_after / 1048576))
+
+    if folders and not keep_assets:
+        freed = 0
+        for d in folders:
+            try:
+                freed += sum(f.stat().st_size for f in d.rglob('*') if f.is_file())
+                import shutil as _sh
+                _sh.rmtree(d)
+            except Exception as exc:
+                print('  删除 %s 失败：%s' % (d.name, exc))
+        print('已删除 %d 个 .assets 目录，释放 %.1f MB（图片已进 md）'
+              % (len(folders), freed / 1048576))
+    elif folders:
+        print('保留了 %d 个 .assets 目录（--keep-assets）' % len(folders))
+
+    return 0
 
 
 def _uicheck() -> int:

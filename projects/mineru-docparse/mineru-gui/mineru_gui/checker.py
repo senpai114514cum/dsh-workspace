@@ -114,6 +114,9 @@ def _cells(data: list[str]) -> list[str]:
 
 def pdf_table_captions(pdf: Path):
     """从 PDF 文字层数出真正的表格标题数。返回 (编号集合, 说明)。"""
+    # 只有 md、没有原文时也要能跑（比如检查一份手工整理过的产物）
+    if pdf is None:
+        return None, '未提供原文，跳过核对'
     if pdf.suffix.lower() != '.pdf':
         return None, '非 PDF 输入，跳过原文核对'
     try:

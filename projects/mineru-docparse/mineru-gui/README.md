@@ -92,6 +92,32 @@
 | `pdf-03-pdflatex-image.md` | 174.2 KB | **0.67 KB** + 127 KB jpg |
 | `docx-01-with-images.md` | 41.6 KB | **0.29 KB** + 3 张图 |
 
+**反向也支持：把图片重新内联回 md。** 抽成文件之后 md 就不再自包含了——
+要单独发出去、塞进知识库、或者归档成一个文件时，用队列工具栏的
+**「图片内联回 md」**按钮（或命令行 `--inline`）把图片合回去：
+
+```
+提取前：![](data:image/png;base64,iVBOR...)
+提取后：![](论文.assets/img_001_ab12cd34ef56.png)
+内联后：![](data:image/png;base64,iVBOR...)      ← 回到原样
+```
+
+两个方向都是**原地替换、位置不变**。实测往返无损：
+
+| 项目 | 结果 |
+|---|---|
+| 图片数量 | 一致（6 → 6） |
+| 图片内容 | 逐字节相同（sha1 比对） |
+| **正文段落** | **7/7 逐字节一致**（位置完全保持） |
+| 再抽取一次 | 与原文件逐字节一致 |
+| 体积 | 44.5 KB md + 656 KB 图片 → **单个 919.9 KB 的 md** |
+
+内联后程序会问要不要顺手删掉已不再需要的 `.assets` 目录（图片已在 md 内部，删了不影响）。
+传 `--keep-assets` 可以保留。
+
+细节：跳过 `http(s):` 外链和已经是 base64 的引用；链接标题（`![alt](x.png "标题")`）
+会保住；`%20` 这类转义会先解码；**文件缺失时原样保留并计数，不会把 md 改坏**。
+
 > 另一条路是 `--format zip`：MinerU 本来就会输出 `images/` 目录 + 相对路径引用的
 > md。但要解压 + 改写路径 + 处理多文档同名冲突，程序里选的是直接在 md 上做。
 
@@ -193,6 +219,11 @@ $py = '%MINERU_ROOT%\.venv\Scripts\python.exe'
 
 # 预测 auto 会选 txt 还是 ocr（不真的转换）
 & $py run.py --probe 论文.pdf 扫描件.png 表格.xlsx
+
+# 把图片重新内联回 md，让产物变成自包含单文件（反向操作）
+& $py run.py --inline 输出.md                    # 单个文件
+& $py run.py --inline D:\某个输出目录             # 目录下所有 md
+& $py run.py --inline 输出.md --keep-assets       # 保留 .assets 目录
 
 # 不开界面跑一遍真实流水线（自检 / 排查环境）
 & $py run.py --selftest 某个.pdf

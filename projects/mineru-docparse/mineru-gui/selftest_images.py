@@ -1,4 +1,5 @@
 """验证：图片抽取 + 乱码检测 + 各模块回归。"""
+import base64
 import os
 import shutil
 import sys
@@ -137,6 +138,68 @@ expect(_r['prose_demoted'] == 1, 'clean 还原了 1 个散文块')
 expect(not _after.lstrip().startswith('$$'), '还原后不再是公式块')
 expect('countable subadditivity yields' in _after, '正文保留')
 expect('$i \\in \\{ 1 , \\ldots , n \\}$' in _after, '内层行内公式保留')
+
+print()
+print('=== images.inline_images：反向合回单文件 ===')
+# 往返：内联 → 抽取 → 再内联，应当回到原样
+rt = TMP / 'roundtrip.md'
+original = ('# 标题\n\n图1：![](data:image/png;base64,%s)\n\n正文\n\n'
+            '图2：![](data:image/jpeg;base64,%s)\n\n'
+            '再引用图1：![](data:image/png;base64,%s)\n' % (PNG, JPG, PNG))
+rt.write_text(original, encoding='utf-8')
+
+e = images.extract_inline_images(rt)
+expect(e['count'] == 3 and e['unique'] == 2, '往返：先抽取出 3 处引用 / 2 个文件')
+mid = rt.read_text(encoding='utf-8')
+expect('data:image' not in mid, '往返：抽取后无 base64')
+
+i = images.inline_images(rt)
+back = rt.read_text(encoding='utf-8')
+expect(i['count'] == 3, '往返：内联回 3 处引用（实际 %d）' % i['count'])
+expect('data:image/png;base64,%s' % PNG in back, '往返：PNG 内容与原文一致')
+expect('data:image/jpeg;base64,%s' % JPG in back, '往返：JPEG 内容与原文一致')
+# 位置不变：三处引用的先后次序应与最初一致
+expect(back.count('data:image/png') == 2 and back.count('data:image/jpeg') == 1,
+       '往返：两种图的数量正确')
+expect(back.index('data:image/png') < back.index('data:image/jpeg'),
+       '往返：图片先后位置保持')
+expect(i['after'] > i['before'] * 2, '往返：内联后体积明显变大（%d → %d）'
+       % (i['before'], i['after']))
+
+print()
+print('=== inline_images 的边界情况 ===')
+edge = TMP / 'edge'
+edge.mkdir(parents=True, exist_ok=True)
+(edge / 'has space.png').write_bytes(base64.b64decode(PNG))
+(edge / 'a.jpg').write_bytes(base64.b64decode(JPG))
+em = edge / 'edge.md'
+# 注意：正文里有 has%20space.png，用 % 格式化会被当成格式符，所以用 f-string
+em.write_text(
+    '# 边界\n\n'
+    '本地：![](has%20space.png)\n\n'                      # %20 转义
+    '带标题：![](a.jpg "图注")\n\n'                        # 要保住标题
+    '外链：![](https://example.com/x.png)\n\n'            # 跳过
+    f'已有内联：![](data:image/png;base64,{PNG})\n\n'      # 跳过
+    '缺失：![](nope.png)\n\n'                              # 原样保留
+    '子目录：![](../edge/a.jpg)\n',                        # 相对路径带 ..
+    encoding='utf-8')
+er = images.inline_images(em)
+etext = em.read_text(encoding='utf-8')
+expect(er['count'] == 3, '内联 3 处（本地 / 带标题 / 相对路径），实际 %d' % er['count'])
+expect(er['external'] == 1, '外链被计数跳过')
+expect(er['missing'] == 1, '缺失文件被计数')
+expect('https://example.com/x.png' in etext, '外链原样保留')
+expect('nope.png' in etext, '缺失文件原样保留（没把 md 改坏）')
+expect('"图注"' in etext, '链接标题保住了')
+expect(etext.count('data:image/base64') == 0, '没有产生畸形的 data URI')
+
+# 已经是内联的 md 再内联一次应当是空操作
+noop = TMP / 'noop.md'
+noop.write_text('![](data:image/png;base64,%s)\n' % PNG, encoding='utf-8')
+nr = images.inline_images(noop)
+expect(nr['count'] == 0 and not nr['changed'], '全内联的 md 上再内联是空操作')
+expect(images.describe_inline(nr).startswith('没有可内联'), 'describe_inline 措辞正确')
+expect('体积' in images.describe_inline(i), 'describe_inline 报告了体积变化')
 
 print()
 print('=' * 50)

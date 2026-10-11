@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import queue
+import shutil
 import threading
 import time
 import tkinter as tk
@@ -14,7 +15,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import APP_NAME, __version__
-from . import checker, dnd, probe
+from . import checker, dnd, images, probe
 from .config import (OCR_LABEL, OCR_MODES, SUPPORTED_EXT, TIER_LABEL, TIERS,
                      Settings, reject_reason)
 from .runner import Job, Runner
@@ -173,6 +174,9 @@ class App(tk.Tk):
                           ('移除选中', self._remove_selected), ('上移', lambda: self._move(-1)),
                           ('下移', lambda: self._move(1)), ('清空', self._clear)]:
             ttk.Button(bar, text=text, command=cmd).pack(side='left', padx=(0, 6))
+        ttk.Separator(bar, orient='vertical').pack(side='left', fill='y', padx=(2, 6))
+        self.btn_inline = ttk.Button(bar, text='图片内联回 md', command=self._inline_outputs)
+        self.btn_inline.pack(side='left')
 
         # 进度 + 日志
         f_r = ttk.LabelFrame(mid, text='进度')
@@ -345,6 +349,85 @@ class App(tk.Tk):
 
     def _selected_positions(self) -> list[int]:
         return sorted(self.tree.index(i) for i in self.tree.selection())
+
+    # ---------------------------------------------- 图片内联回 md
+
+    def _inline_targets(self) -> list[Job]:
+        """要处理哪些产物：优先选中的行，没选就取全部已完成的。"""
+        pos = self._selected_positions()
+        pool = [self.jobs[i] for i in pos] if pos else self.jobs
+        return [j for j in pool
+                if j.status == 'done' and j.out and Path(j.out).exists()]
+
+    def _inline_outputs(self) -> None:
+        """把 .assets 里的图片重新内联回 md，让产物变成单文件、可移植。
+
+        这是「图片抽成独立文件」的反向操作：位置不变，只把相对路径换回 base64。
+        代价是体积变大，好处是 md 可以单独发出去 / 塞进知识库 / 直接归档。
+        """
+        jobs = self._inline_targets()
+        if not jobs:
+            messagebox.showinfo(
+                '没有可处理的产物',
+                '先完成转换，或在队列里选中已完成的文件。\n\n'
+                '这个操作把产物目录里的图片合回 md，\n'
+                '让 md 变成自包含的单文件。')
+            return
+
+        scope = '选中的 %d 个' % len(jobs) if self._selected_positions() else '全部已完成 %d 个' % len(jobs)
+        if not messagebox.askyesno(
+                '确认',
+                '将把 %s产物里的图片重新内联回 md。\n\n'
+                '· 图片位置不变，只把 ![](名字.assets/xx.jpg) 换回 base64\n'
+                '· 同一个文章再想拆分需要重新转换\n'
+                '· md 体积会明显变大\n\n继续？' % scope):
+            return
+
+        done, skipped, total_before, total_after = 0, 0, 0, 0
+        folders: set[Path] = set()
+        for j in jobs:
+            try:
+                r = images.inline_images(Path(j.out))
+            except Exception as exc:
+                self._log('内联失败 %s —— %s: %s' % (j.name, type(exc).__name__, exc))
+                continue
+            if r['count']:
+                done += 1
+                total_before += r['before']
+                total_after += r['after']
+                assets = Path(j.out).parent / (Path(j.out).stem + '.assets')
+                if assets.is_dir():
+                    folders.add(assets)
+                self._log('%s：%s' % (j.name, images.describe_inline(r)))
+            else:
+                skipped += 1
+                self._log('%s：%s' % (j.name, images.describe_inline(r)))
+
+        if not done:
+            messagebox.showinfo('完成', '没有可内联的图片（%d 个产物跳过）。\n\n'
+                                        '可能图片本来就已经内联在 md 里了。' % skipped)
+            return
+
+        self._log('合计：%d 个产物已内联，%d 个跳过；体积 %.0f KB → %.1f MB'
+                  % (done, skipped, total_before / 1024, total_after / 1048576))
+        self.lbl_hint.config(text='已内联 %d 个产物（%d 个跳过）' % (done, skipped))
+
+        # 图片已经进了 md，旁边那个 .assets 目录就没用了，问一下要不要清掉
+        if folders:
+            mb = sum(f.stat().st_size for d in folders for f in d.rglob('*') if f.is_file()) / 1048576
+            if messagebox.askyesno(
+                    '顺带清理',
+                    '图片已经写进 md，这 %d 个 .assets 目录（共 %.1f MB）不再需要了。\n\n'
+                    '要现在删除吗？（删除后不影响 md，图片仍在 md 内部）' % (len(folders), mb)):
+                freed = 0
+                for d in folders:
+                    try:
+                        freed += sum(f.stat().st_size for f in d.rglob('*') if f.is_file())
+                        shutil.rmtree(d)
+                    except Exception as exc:
+                        self._log('删除 %s 失败：%s' % (d.name, exc))
+                self._log('已删除 %d 个 .assets 目录，释放 %.1f MB'
+                          % (len(folders), freed / 1048576))
 
     def _remove_selected(self) -> None:
         for pos in reversed(self._selected_positions()):
